@@ -1,0 +1,15 @@
+aws_region               = "us-east-1"
+environment              = "production"
+cluster_name             = "oficina-eks-cluster"
+cluster_version          = "1.30"
+vpc_cidr                 = "10.0.0.0/16"
+k8s_node_instance_types  = ["t3.medium"]
+node_desired_size        = 2
+node_min_size            = 1
+node_max_size            = 5
+api_gateway_name         = "oficina-main-api-gateway"
+enable_datadog           = false
+datadog_api_key          = ""
+datadog_site             = "datadoghq.com"
+enable_metrics_server    = true
+enable_cloudwatch_alarms = true
