@@ -1,32 +1,45 @@
-# ==============================================================================
-# AWS EKS CLUSTER (CONTROL PLANE)
-# ==============================================================================
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "${var.cluster_name}-logs"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
 
-resource "aws_eks_cluster" "main" {
-  name     = var.cluster_name
-  role_arn = aws_iam_role.eks_cluster.arn
-  version  = var.cluster_version
+resource "azurerm_kubernetes_cluster" "main" {
+  name                = var.cluster_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  dns_prefix          = var.cluster_name
+  kubernetes_version  = var.cluster_version
+  sku_tier            = "Free"
 
-  vpc_config {
-    security_group_ids = [aws_security_group.eks_cluster.id]
-    subnet_ids = [
-      aws_subnet.public_1.id,
-      aws_subnet.public_2.id,
-      aws_subnet.private_1.id,
-      aws_subnet.private_2.id
-    ]
-    endpoint_private_access = true
-    endpoint_public_access  = true
+  default_node_pool {
+    name                 = "system"
+    vm_size              = var.k8s_node_vm_size
+    vnet_subnet_id       = azurerm_subnet.nodes.id
+    node_count           = var.node_desired_size
+    min_count            = var.node_min_size
+    max_count            = var.node_max_size
+    auto_scaling_enabled = true
+    zones                = ["1", "2", "3"]
   }
 
-  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy,
-    aws_iam_role_policy_attachment.eks_vpc_resource_controller
-  ]
-
-  tags = {
-    Name = var.cluster_name
+  identity {
+    type = "SystemAssigned"
   }
+
+  network_profile {
+    network_plugin      = "azure"
+    network_plugin_mode = "overlay"
+    load_balancer_sku   = "standard"
+    service_cidr        = "10.2.0.0/16"
+    dns_service_ip      = "10.2.0.10"
+  }
+
+  oms_agent {
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+  }
+
+  azure_policy_enabled = true
 }

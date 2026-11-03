@@ -1,20 +1,11 @@
-# ==============================================================================
-# MONITORAMENTO & OBSERVABILIDADE (DATADOG, METRICS SERVER & CLOUDWATCH)
-# ==============================================================================
-
-# Namespace dedicado para agentes de monitoramento
 resource "kubernetes_namespace" "monitoring" {
   metadata {
     name = "monitoring"
-    labels = {
-      name = "monitoring"
-    }
   }
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [azurerm_kubernetes_cluster.main]
 }
 
-# 1. Kubernetes Metrics Server (Habilita a coleta de CPU/Memória para HPA)
 resource "helm_release" "metrics_server" {
   count      = var.enable_metrics_server ? 1 : 0
   name       = "metrics-server"
@@ -28,10 +19,9 @@ resource "helm_release" "metrics_server" {
     value = "--kubelet-insecure-tls"
   }
 
-  depends_on = [aws_eks_node_group.main]
+  depends_on = [azurerm_kubernetes_cluster.main]
 }
 
-# 2. Datadog Agent (Monitoramento APM, Traces, Logs JSON e Métricas do Cluster)
 resource "helm_release" "datadog_agent" {
   count      = var.enable_datadog && var.datadog_api_key != "" ? 1 : 0
   name       = "datadog"
@@ -50,13 +40,11 @@ resource "helm_release" "datadog_agent" {
     value = var.datadog_site
   }
 
-  # Habilitar APM (Traces e latência das requisições)
   set {
     name  = "datadog.apm.portEnabled"
     value = "true"
   }
 
-  # Habilitar coleta centralizada de Logs estruturados em JSON
   set {
     name  = "datadog.logs.enabled"
     value = "true"
@@ -67,61 +55,39 @@ resource "helm_release" "datadog_agent" {
     value = "true"
   }
 
-  # Habilitar monitoramento de processos e métricas de nós/pods
-  set {
-    name  = "datadog.processAgent.enabled"
-    value = "true"
-  }
-
   set {
     name  = "clusterAgent.enabled"
     value = "true"
   }
 
-  set {
-    name  = "clusterAgent.metricsProvider.enabled"
-    value = "true"
-  }
-
-  depends_on = [aws_eks_node_group.main, kubernetes_namespace.monitoring]
+  depends_on = [azurerm_kubernetes_cluster.main, kubernetes_namespace.monitoring]
 }
 
-# ==============================================================================
-# CLOUDWATCH ALARMS (SLA, LATÊNCIA & CONSUMO DE RECURSOS)
-# ==============================================================================
-
-# Alarme de latência do API Gateway (> 2000 ms por 2 períodos consecutivos)
-resource "aws_cloudwatch_metric_alarm" "api_gateway_high_latency" {
-  count               = var.enable_cloudwatch_alarms ? 1 : 0
-  alarm_name          = "${var.api_gateway_name}-HighLatency"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  metric_name         = "IntegrationLatency"
-  namespace           = "AWS/ApiGateway"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 2000
-  alarm_description   = "Alarme disparado quando a latencia media da API ultrapassa 2 segundos"
-
-  dimensions = {
-    ApiId = aws_apigatewayv2_api.main.id
-  }
+resource "azurerm_monitor_action_group" "platform" {
+  name                = "${var.api_gateway_name}-alerts"
+  resource_group_name = azurerm_resource_group.main.name
+  short_name          = "siaesalert"
 }
 
-# Alarme de taxa de erros 5XX no API Gateway (> 5 erros por minuto)
-resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx_errors" {
-  count               = var.enable_cloudwatch_alarms ? 1 : 0
-  alarm_name          = "${var.api_gateway_name}-5XXErrorRate"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "5XX"
-  namespace           = "AWS/ApiGateway"
-  period              = 60
-  statistic           = "Sum"
-  threshold           = 5
-  alarm_description   = "Alarme disparado quando ocorrem mais de 5 falhas 5XX por minuto na API"
+resource "azurerm_monitor_metric_alert" "aks_cpu" {
+  count               = var.enable_monitor_alerts ? 1 : 0
+  name                = "${var.cluster_name}-high-cpu"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_kubernetes_cluster.main.id]
+  description         = "Alerta de consumo elevado de CPU no AKS"
+  severity            = 2
+  frequency           = "PT1M"
+  window_size         = "PT5M"
 
-  dimensions = {
-    ApiId = aws_apigatewayv2_api.main.id
+  criteria {
+    metric_namespace = "Microsoft.ContainerService/managedClusters"
+    metric_name      = "node_cpu_usage_percentage"
+    aggregation      = "Average"
+    operator         = "GreaterThan"
+    threshold        = 80
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.platform.id
   }
 }

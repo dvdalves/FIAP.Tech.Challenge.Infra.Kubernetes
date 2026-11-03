@@ -1,141 +1,57 @@
-# ==============================================================================
-# NETWORKING - VPC, SUBNETS, INTERNET & NAT GATEWAY
-# ==============================================================================
-
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
+resource "azurerm_resource_group" "main" {
+  name     = var.resource_group_name
+  location = var.azure_region
   tags = {
-    Name = "${var.cluster_name}-vpc"
+    Project     = "FIAP-Tech-Challenge"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+    Repository  = "FIAP.Tech.Challenge.Infra.Kubernetes"
   }
 }
 
-resource "aws_internet_gateway" "gw" {
-  vpc_id = aws_vpc.main.id
-
-  tags = {
-    Name = "${var.cluster_name}-igw"
-  }
+resource "azurerm_virtual_network" "main" {
+  name                = "${var.cluster_name}-vnet"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  address_space       = [var.vnet_address_space]
 }
 
-# Subnets Públicas (Multi-AZ) para Load Balancers e NAT Gateway
-resource "aws_subnet" "public_1" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name                                        = "${var.cluster_name}-public-1"
-    "kubernetes.io/role/elb"                    = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-  }
+resource "azurerm_subnet" "nodes" {
+  name                 = "aks-nodes"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [var.node_subnet_prefix]
 }
 
-resource "aws_subnet" "public_2" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "${var.aws_region}b"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name                                        = "${var.cluster_name}-public-2"
-    "kubernetes.io/role/elb"                    = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-  }
+resource "azurerm_subnet" "services" {
+  name                 = "private-services"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = var.service_subnet_prefix
 }
 
-# Subnets Privadas (Multi-AZ) para os Nós Worker do EKS e Banco de Dados
-resource "aws_subnet" "private_1" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.10.0/24"
-  availability_zone = "${var.aws_region}a"
-
-  tags = {
-    Name                                        = "${var.cluster_name}-private-1"
-    "kubernetes.io/role/internal-elb"           = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-  }
+resource "azurerm_public_ip" "nat" {
+  name                = "${var.cluster_name}-nat-ip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
 }
 
-resource "aws_subnet" "private_2" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.20.0/24"
-  availability_zone = "${var.aws_region}b"
-
-  tags = {
-    Name                                        = "${var.cluster_name}-private-2"
-    "kubernetes.io/role/internal-elb"           = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-  }
+resource "azurerm_nat_gateway" "main" {
+  name                    = "${var.cluster_name}-nat"
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  sku_name                = "Standard"
+  idle_timeout_in_minutes = 10
 }
 
-# NAT Gateway para prover saída à Internet para os nós privados (downloads de imagens / patches)
-resource "aws_eip" "nat" {
-  domain = "vpc"
-
-  tags = {
-    Name = "${var.cluster_name}-nat-eip"
-  }
+resource "azurerm_nat_gateway_public_ip_association" "main" {
+  nat_gateway_id       = azurerm_nat_gateway.main.id
+  public_ip_address_id = azurerm_public_ip.nat.id
 }
 
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public_1.id
-
-  tags = {
-    Name = "${var.cluster_name}-nat-gw"
-  }
-
-  depends_on = [aws_internet_gateway.gw]
-}
-
-# Tabela de Roteamento Pública
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.gw.id
-  }
-
-  tags = {
-    Name = "${var.cluster_name}-public-rt"
-  }
-}
-
-resource "aws_route_table_association" "public_1" {
-  subnet_id      = aws_subnet.public_1.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "public_2" {
-  subnet_id      = aws_subnet.public_2.id
-  route_table_id = aws_route_table.public.id
-}
-
-# Tabela de Roteamento Privada (roteia tráfego externo via NAT Gateway)
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat.id
-  }
-
-  tags = {
-    Name = "${var.cluster_name}-private-rt"
-  }
-}
-
-resource "aws_route_table_association" "private_1" {
-  subnet_id      = aws_subnet.private_1.id
-  route_table_id = aws_route_table.private.id
-}
-
-resource "aws_route_table_association" "private_2" {
-  subnet_id      = aws_subnet.private_2.id
-  route_table_id = aws_route_table.private.id
+resource "azurerm_subnet_nat_gateway_association" "nodes" {
+  subnet_id      = azurerm_subnet.nodes.id
+  nat_gateway_id = azurerm_nat_gateway.main.id
 }
