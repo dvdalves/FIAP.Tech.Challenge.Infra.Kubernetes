@@ -9,7 +9,7 @@ on:
 
 env:
   TERRAFORM_VERSION: "1.8.0"
-  AZURE_REGION: "East US"
+  AZURE_REGION: "North Central US"
 
 jobs:
   # ============================================================================

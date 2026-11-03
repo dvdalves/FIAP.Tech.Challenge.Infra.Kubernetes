@@ -1,7 +1,7 @@
 variable "azure_region" {
   description = "Região do Azure para provisionamento do cluster e VNet"
   type        = string
-  default     = "East US"
+  default     = "North Central US"
 }
 
 variable "resource_group_name" {
@@ -23,9 +23,9 @@ variable "cluster_name" {
 }
 
 variable "cluster_version" {
-  description = "Versão do Kubernetes control plane no AKS"
+  description = "Versão do Kubernetes control plane no AKS (null para versão padrão da região)"
   type        = string
-  default     = "1.30"
+  default     = null
 }
 
 variable "vnet_address_space" {
