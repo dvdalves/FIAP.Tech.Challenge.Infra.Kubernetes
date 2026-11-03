@@ -1,210 +1,83 @@
-# FIAP Tech Challenge - Infraestrutura Kubernetes AKS & Networking (Fase 3)
+# FIAP Tech Challenge — Infraestrutura Kubernetes
 
 [![CI/CD Pipeline](https://github.com/dvdalves/FIAP.Tech.Challenge.Infra.Kubernetes/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/dvdalves/FIAP.Tech.Challenge.Infra.Kubernetes/actions/workflows/ci-cd.yml)
 
-Repositório responsável pelo provisionamento como código (**IaC - Terraform**) da **infraestrutura de rede (VNet)**, **Cluster Kubernetes Gerenciado (Azure AKS)**, **Managed Node Groups**, **Azure API Management** e **Stack de Observabilidade & Monitoramento**, conforme exigido na **Fase 3 do Tech Challenge SOAT - FIAP**.
+Repositório Terraform responsável pela infraestrutura de rede, pelo cluster Azure Kubernetes Service (AKS), pelo Azure API Management e pelos componentes de observabilidade do SIAES.
 
----
+## Sumário
 
-## 🧭 Sumário
+1. [Responsabilidade](#1-responsabilidade)
+2. [Tecnologias](#2-tecnologias)
+3. [Recursos](#3-recursos)
+4. [Como Provisionar](#4-como-provisionar)
+5. [CI/CD](#5-cicd)
 
-1. [Propósito do Repositório](#1-propósito-do-repositório)
-2. [Tecnologias Utilizadas](#2-tecnologias-utilizadas)
-3. [Arquitetura de Nuvem e Componentes](#3-arquitetura-de-nuvem-e-componentes)
-4. [Recursos Provisionados](#4-recursos-provisionados)
-   - [Rede & Conectividade (VNet)](#rede--conectividade-vpc)
-   - [Cluster Kubernetes (Azure AKS)](#cluster-kubernetes-aws-eks)
-   - [Azure API Management (HTTP API v2)](#aws-api-gateway-http-api-v2)
-5. [Monitoramento e Observabilidade](#5-monitoramento-e-observabilidade)
-   - [Métricas & Datadog Integration](#métricas--datadog-integration)
-   - [Alarmes Azure Monitor](#alarmes-azure-monitor)
-   - [Horizontal Pod Autoscaler (HPA) & Metrics Server](#horizontal-pod-autoscaler-hpa--metrics-server)
-6. [Passo a Passo de Provisionamento](#6-passo-a-passo-de-provisionamento)
-   - [Pré-requisitos](#pré-requisitos)
-   - [Execução via Terraform CLI](#execução-via-terraform-cli)
-   - [Conexão ao Cluster com kubectl](#conexão-ao-cluster-com-kubectl)
-7. [Esteira de CI/CD (GitHub Actions)](#7-esteira-de-cicd-github-actions)
-8. [Tabela de Variáveis do Terraform](#8-tabela-de-variáveis-do-terraform)
-9. [Segurança e Governança](#9-segurança-e-governança)
+## 1. Responsabilidade
 
----
+- Provisionar a VNet e as subnets do ambiente.
+- Criar e configurar o cluster AKS.
+- Configurar o ponto de entrada pelo Azure API Management.
+- Habilitar escalabilidade horizontal com Metrics Server e HPA.
+- Integrar métricas, logs e traces com Azure Monitor e Datadog.
 
-## 1. Propósito do Repositório
+## 2. Tecnologias
 
-Isolar e automatizar o ciclo de vida da infraestrutura de orquestração de contêineres e comunicação do sistema **SIAES (Oficina Mecânica)**. Este repositório é responsável por garantir:
+- Terraform `>= 1.5.0`.
+- Azure VNet, NAT Gateway e NSG.
+- Azure Kubernetes Service `1.30`.
+- Azure API Management.
+- Kubernetes Metrics Server e HPA.
+- Datadog Agent.
+- Azure Monitor.
+- GitHub Actions.
 
-- Alta disponibilidade geográfica com subnets distribuídas em múltiplas Zonas de Disponibilidade (zone-redundant).
-- Isolamento estrito de segurança (nós de computação alocados em subnets privadas sem IP público).
-- Escalabilidade horizontal e elástica de pods e nós baseada em métricas de CPU e memória.
-- Roteamento centralizado, controle de tráfego, CORS e rastreabilidade via **Azure API Management**.
-- Visibilidade operacional contínua através da integração nativa com ferramentas de observabilidade (**Datadog / Azure Monitor / Prometheus**).
+## 3. Recursos
 
----
+Os recursos principais são declarados nos arquivos Terraform:
 
-## 2. Tecnologias Utilizadas
+- Rede privada para os workloads.
+- Cluster AKS e node pool com autoscaling.
+- API Management para roteamento das APIs.
+- Integração opcional com Datadog.
+- Alertas e métricas do ambiente Azure.
 
-| Tecnologia | Versão | Finalidade |
-| :--- | :--- | :--- |
-| **Terraform** | `>= 1.5.0` | Orquestração declarativa de infraestrutura como código (IaC) |
-| **Azure AKS** | `1.30` | Orquestrador Kubernetes de nível corporativo gerenciado pela Azure |
-| **Azure VNet & NAT Gateway** | zone-redundant | Topologia de rede segura com subnets públicas e privadas |
-| **Azure API Management** | HTTP API v2 | Ponto de entrada das requisições públicas, com throttling e logs |
-| **Kubernetes Metrics Server** | `3.12.x` | Provedor de métricas de pods e nós para viabilizar autoscaling (HPA) |
-| **Datadog Agent** | `3.66.x` | Agente DaemonSet para APM, traces distribuídos e logs estruturados |
-| **Azure Monitor** | Nativo | Coleta de logs de auditoria do control plane e alarmes de SLA |
-| **GitHub Actions** | v4 | Pipeline automatizada de validação sintática, linting e deploy |
+Os manifestos Kubernetes da aplicação ficam no repositório principal, em [`k8s/`](https://github.com/dvdalves/FIAP.Tech.Challenge/tree/master/k8s).
 
----
-
-## 3. Arquitetura de Nuvem e Componentes
-
-```mermaid
-graph TD
-    Internet(["🌐 Usuários / Clientes Externos"]) --> APIGW["🚪 Azure API Management (HTTP API v2)<br/>Rotas /auth/* e /api/*"]
-    
-    subgraph VNet ["Azure VNet (10.0.0.0/16)"]
-        subgraph PublicSubnets ["Subnets Públicas (10.0.1.0/24 & 10.0.2.0/24)"]
-            InternetAccess["🌐 Acesso à Internet"]
-            NAT["🔄 Azure NAT Gateway"]
-            ApplicationGateway["⚖️ Azure Load Balancer"]
-        end
-
-        subgraph PrivateSubnets ["Subnets Privadas (10.0.10.0/24 & 10.0.20.0/24)"]
-            subgraph AKSCluster ["Cluster Azure AKS v1.30"]
-                Node1["🖥️ Worker Node A (Standard_D2s_v5)"]
-                Node2["🖥️ Worker Node B (Standard_D2s_v5)"]
-                
-                PodAPI["📦 Pod SIAES API (.NET 10)"]
-                PodHPA["⚡ HPA (Auto-scaling 2-5 pods)"]
-                PodDD["📊 Datadog / Metrics Server"]
-            end
-        end
-    end
-
-    APIGW --> ApplicationGateway
-    ApplicationGateway --> PodAPI
-    NAT --> InternetAccess
-    PodAPI --> PodDD
-    PodDD --> DatadogCloud["📈 Datadog Cloud / Azure Monitor Dashboards"]
-```
-
----
-
-## 4. Recursos Provisionados
-
-### Rede & Conectividade (VNet)
-- **VNet Dedicada**: Bloco CIDR `10.0.0.0/16` com suporte a nomes e resolução DNS internos.
-- **Subnets de workloads**: Segmentadas para nós AKS e serviços privados.
-- **NAT Gateway & Public IP**: Permite que os nós baixem pacotes e contêineres sem exposição pública direta.
-
-### Cluster Kubernetes (Azure AKS)
-- **Control Plane**: Versão `1.30` com endpoints público e privado habilitados e logs ativos (`api`, `audit`, `authenticator`, `controllerManager`, `scheduler`).
-- **Managed Node Group**:
-  - VMs `Standard_D2s_v5` gerenciadas pelo Azure.
-  - Alocação exclusivamente em subnets privadas.
-  - Dimensionamento elástico: Mínimo 1, Desejado 2, Máximo 5 nós.
-  - Atualização com política de tolerância de falhas (`max_unavailable = 1`).
-
-### Azure API Management (HTTP API v2)
-- Roteamento central com suporte nativo a CORS.
-- Integração VNet Link para comunicação de baixa latência diretamente com a rede interna do AKS.
-- Coleta de access logs em formato estruturado JSON enviada diretamente ao **Azure Monitor Logs** com retenção de 14 dias.
-
----
-
-## 5. Monitoramento e Observabilidade
-
-Atendendo aos requisitos da **Fase 3**, a infraestrutura foi projetada para suportar observabilidade de ponta a ponta:
-
-### Métricas & Datadog Integration
-Ao definir `enable_datadog = true` e fornecer a `datadog_api_key`, o Terraform instala o **Datadog Agent** via Helm com:
-- **APM & Tracing Distribuído**: Rastreabilidade de chamadas entre serviços e identificação de gargalos de latência.
-- **Logs Estruturados (JSON)**: Ingestão contínua de logs contendo correlação de requisições (`traceparent`, `requestId`).
-- **Métricas de Cluster**: Monitoramento de saturação de CPU, consumo de memória de nós e pods, e taxas de rede.
-- **Dashboards Operacionais**:
-  - Volume diário de ordens de serviço.
-  - Tempo médio de execução por status (Diagnóstico, Execução, Finalização).
-  - Taxa de erros 4xx e 5xx e falhas em integrações.
-
-### Alarmes Azure Monitor
-São provisionados automaticamente alarmes para monitorar a saúde da infraestrutura:
-- `api_gateway_high_latency`: Alerta se a latência média ultrapassar 2.000 ms.
-- `api_gateway_5xx_errors`: Alerta se houver mais de 5 erros de servidor (HTTP 5XX) por minuto.
-
-### Horizontal Pod Autoscaler (HPA) & Metrics Server
-O repositório provisiona o **Kubernetes Metrics Server** (`kube-system`), permitindo que as regras de HPA declaradas nos manifests da aplicação executem o escalonamento horizontal automático baseado no consumo de CPU (> 70%) e memória (> 80%).
-
----
-
-## 6. Passo a Passo de Provisionamento
+## 4. Como Provisionar
 
 ### Pré-requisitos
-- [Terraform CLI](https://developer.hashicorp.com/terraform/downloads) instalado (versão >= 1.5.0).
-- [Azure CLI](https://aws.amazon.com/cli/) instalado e configurado com credenciais (`az login`).
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) instalado.
 
-### Execução via Terraform CLI
+- [Terraform CLI](https://developer.hashicorp.com/terraform/downloads).
+- [Azure CLI](https://learn.microsoft.com/cli/azure/) autenticado com `az login`.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/).
+- Permissões Azure para criar e alterar os recursos.
+
+### Execução
 
 ```bash
-# 1. Copiar variáveis de exemplo
 cp terraform.tfvars.example terraform.tfvars
+```
 
-# 2. Ajustar terraform.tfvars com as configurações desejadas
-# (ex: região, limites de autoscaling, credenciais do Datadog se aplicável)
+Preencha o arquivo local com os valores do ambiente. Não publique `terraform.tfvars`, arquivos de estado, chaves do Datadog ou credenciais.
 
-# 3. Inicializar provedores e módulos
+```bash
 terraform init
-
-# 4. Planejar as alterações
+terraform fmt -check
+terraform validate
 terraform plan -out=tfplan
-
-# 5. Aplicar o provisionamento (criação da VNet, AKS e API Management)
 terraform apply tfplan
 ```
 
-### Conexão ao Cluster com kubectl
-
-Após a conclusão do `terraform apply`, atualize o seu contexto local do `kubectl`:
+Após o provisionamento, obtenha as credenciais do cluster:
 
 ```bash
-az aks get-credentials --resource-group fiap-tech-challenge-rg --name oficina-aks-cluster
+az aks get-credentials \
+  --resource-group <resource-group> \
+  --name <cluster-name>
 
-# Validar conexão com os nós
-kubectl get nodes -o wide
+kubectl get nodes
 ```
 
----
+## 5. CI/CD
 
-## 7. Esteira de CI/CD (GitHub Actions)
-
-A esteira declarada em [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) automatiza o controle de qualidade e a entrega contínua:
-
-1. **`terraform-validate`**: Valida a formatação de código (`terraform fmt -check`), baixa provedores e valida a integridade lógica (`terraform validate`).
-2. **`terraform-plan`**: Em Pull Requests, executa `terraform plan` e exibe o resumo dos recursos a serem modificados.
-3. **`terraform-apply`**: Executado automaticamente após o merge na branch `main` ou `master`, aplicando as mudanças na Azure.
-
----
-
-## 8. Tabela de Variáveis do Terraform
-
-| Variável | Tipo | Padrão | Descrição |
-| :--- | :--- | :--- | :--- |
-| `azure_region` | `string` | `"East US"` | Região Azure de provisionamento |
-| `cluster_name` | `string` | `"oficina-eks-cluster"` | Nome do cluster AKS |
-| `cluster_version` | `string` | `"1.30"` | Versão do Kubernetes |
-| `vnet_address_space` | `string` | `"10.0.0.0/16"` | Bloco CIDR da VNet |
-| `k8s_node_vm_size`| `string`| `"Standard_D2s_v5"` | SKU das VMs do node pool |
-| `node_desired_size` | `number` | `2` | Capacidade desejada de nós |
-| `node_min_size` | `number` | `1` | Limite inferior para auto-scaling |
-| `node_max_size` | `number` | `5` | Limite superior para auto-scaling |
-| `enable_datadog` | `bool` | `false` | Habilita instalação do Datadog Agent via Helm |
-| `datadog_api_key` | `string` | `""` | Chave de API da organização Datadog |
-| `enable_metrics_server` | `bool` | `true` | Instala Metrics Server para HPA |
-
----
-
-## 9. Segurança e Governança
-
-- **Branch Protection**: As branches `main` e `master` exigem revisão por Pull Request e aprovação obrigatória dos checks de validação do Terraform.
-- **Menor Privilégio**: Managed Identity e RBAC do Azure para o control plane e os nós.
-- **Acesso Docente**: O usuário `soat-architecture` possui permissão configurada para avaliação técnica.
+O workflow [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) executa formatação, validação e planejamento do Terraform. O deploy utiliza autenticação federada e secrets configurados no GitHub.
