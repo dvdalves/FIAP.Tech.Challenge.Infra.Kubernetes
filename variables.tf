@@ -1,7 +1,13 @@
-variable "aws_region" {
-  description = "Região da AWS para provisionamento do cluster e VPC"
+variable "azure_region" {
+  description = "Região do Azure para provisionamento do cluster e VNet"
   type        = string
-  default     = "us-east-1"
+  default     = "East US"
+}
+
+variable "resource_group_name" {
+  description = "Resource Group da plataforma"
+  type        = string
+  default     = "fiap-tech-challenge-rg"
 }
 
 variable "environment" {
@@ -11,27 +17,39 @@ variable "environment" {
 }
 
 variable "cluster_name" {
-  description = "Nome do Cluster AWS EKS"
+  description = "Nome do cluster Azure Kubernetes Service"
   type        = string
-  default     = "oficina-eks-cluster"
+  default     = "oficina-aks-cluster"
 }
 
 variable "cluster_version" {
-  description = "Versão do Kubernetes control plane no EKS"
+  description = "Versão do Kubernetes control plane no AKS"
   type        = string
   default     = "1.30"
 }
 
-variable "vpc_cidr" {
-  description = "Bloco CIDR para a VPC dedicada do Kubernetes"
+variable "vnet_address_space" {
+  description = "Bloco CIDR para a VNet dedicada do Kubernetes"
   type        = string
   default     = "10.0.0.0/16"
 }
 
-variable "k8s_node_instance_types" {
-  description = "Tipos de instâncias EC2 para os worker nodes do cluster EKS"
+variable "k8s_node_vm_size" {
+  description = "Tamanho das VMs dos nós do AKS"
+  type        = string
+  default     = "Standard_D2s_v5"
+}
+
+variable "node_subnet_prefix" {
+  description = "CIDR da subnet dos nós do AKS"
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+variable "service_subnet_prefix" {
+  description = "CIDR da subnet de serviços privados"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["10.0.2.0/24"]
 }
 
 variable "node_desired_size" {
@@ -53,9 +71,9 @@ variable "node_max_size" {
 }
 
 variable "api_gateway_name" {
-  description = "Nome do AWS API Gateway HTTP API"
+  description = "Nome do Azure API Management"
   type        = string
-  default     = "oficina-main-api-gateway"
+  default     = "oficina-main-apim"
 }
 
 variable "enable_datadog" {
@@ -83,8 +101,14 @@ variable "enable_metrics_server" {
   default     = true
 }
 
-variable "enable_cloudwatch_alarms" {
-  description = "Habilitar alarmes CloudWatch para latência, CPU e memória"
+variable "enable_monitor_alerts" {
+  description = "Habilitar alertas Azure Monitor para latência e erros"
   type        = bool
   default     = true
+}
+
+variable "publisher_email" {
+  description = "E-mail do publisher do Azure API Management"
+  type        = string
+  default     = "architecture@example.com"
 }
