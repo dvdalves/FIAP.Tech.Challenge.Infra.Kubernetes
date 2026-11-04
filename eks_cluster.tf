@@ -22,7 +22,6 @@ resource "azurerm_kubernetes_cluster" "main" {
     min_count            = var.node_min_size
     max_count            = var.node_max_size
     auto_scaling_enabled = true
-    zones                = ["1", "2", "3"]
   }
 
   identity {

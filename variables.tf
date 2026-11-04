@@ -37,7 +37,7 @@ variable "vnet_address_space" {
 variable "k8s_node_vm_size" {
   description = "Tamanho das VMs dos nós do AKS"
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_B2s"
 }
 
 variable "node_subnet_prefix" {
@@ -55,7 +55,7 @@ variable "service_subnet_prefix" {
 variable "node_desired_size" {
   description = "Quantidade desejada de instâncias worker no Node Group"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "node_min_size" {
@@ -67,7 +67,7 @@ variable "node_min_size" {
 variable "node_max_size" {
   description = "Quantidade máxima de instâncias worker no Node Group para escalabilidade elástica"
   type        = number
-  default     = 5
+  default     = 1
 }
 
 variable "api_gateway_name" {

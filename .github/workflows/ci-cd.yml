@@ -92,5 +92,12 @@ jobs:
       - name: 📦 Terraform Init
         run: terraform init
 
+      - name: 🔄 Importar Resource Group existente
+        run: |
+          if ! terraform state show azurerm_resource_group.main >/dev/null 2>&1; then
+            terraform import azurerm_resource_group.main \
+              "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/fiap-tech-challenge-rg"
+          fi
+
       - name: 🚀 Terraform Apply
         run: terraform apply -auto-approve
