@@ -132,7 +132,6 @@ jobs:
           import_if_needed azurerm_log_analytics_workspace.main "$BASE/providers/Microsoft.OperationalInsights/workspaces/oficina-aks-cluster-logs"
           import_if_needed azurerm_virtual_network.main "$BASE/providers/Microsoft.Network/virtualNetworks/oficina-aks-cluster-vnet"
           import_if_needed azurerm_subnet.nodes "$BASE/providers/Microsoft.Network/virtualNetworks/oficina-aks-cluster-vnet/subnets/aks-nodes"
-          import_if_needed azurerm_subnet.services "$BASE/providers/Microsoft.Network/virtualNetworks/oficina-aks-cluster-vnet/subnets/private-services"
           import_if_needed azurerm_public_ip.nat "$BASE/providers/Microsoft.Network/publicIPAddresses/oficina-aks-cluster-nat-ip"
           import_if_needed azurerm_nat_gateway.main "$BASE/providers/Microsoft.Network/natGateways/oficina-aks-cluster-nat"
           import_if_needed azurerm_network_security_group.nodes "$BASE/providers/Microsoft.Network/networkSecurityGroups/oficina-aks-cluster-nsg"
@@ -142,6 +141,11 @@ jobs:
 
       - name: 🔐 Configurar kubectl
         run: az aks get-credentials --resource-group fiap-tech-challenge-rg --name oficina-aks-cluster --overwrite-existing
+
+      - name: 🔧 Preparar Metrics Server existente para Helm
+        run: |
+          kubectl -n kube-system label serviceaccount metrics-server app.kubernetes.io/managed-by=Helm --overwrite
+          kubectl -n kube-system annotate serviceaccount metrics-server meta.helm.sh/release-name=metrics-server meta.helm.sh/release-namespace=kube-system --overwrite
 
       - name: 🚀 Aplicar observabilidade e recursos Kubernetes
         run: terraform apply -auto-approve
