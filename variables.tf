@@ -37,7 +37,7 @@ variable "vnet_address_space" {
 variable "k8s_node_vm_size" {
   description = "Tamanho das VMs dos nós do AKS"
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_B2as_v2"
 }
 
 variable "node_subnet_prefix" {
