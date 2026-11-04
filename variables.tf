@@ -98,7 +98,7 @@ variable "datadog_site" {
 variable "enable_metrics_server" {
   description = "Instalar o Kubernetes Metrics Server para permitir Horizontal Pod Autoscaler (HPA)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_monitor_alerts" {
